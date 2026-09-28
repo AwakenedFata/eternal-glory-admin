@@ -14,7 +14,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1141.0",
     "@base-ui/react": "^1.8.0",
     "@maxmind/geoip2-node": "^7.1.0",
-    "@sparticuz/chromium-min": "^131.0.1",
+    "@sparticuz/chromium": "^131.0.1",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
     "dotenv": "^18.0.4",
