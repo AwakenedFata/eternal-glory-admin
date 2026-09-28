@@ -81,7 +81,8 @@ export async function POST(req) {
     status: String(rawLocation.status || "UNRESOLVED"),
     databaseType: rawLocation.databaseType ? String(rawLocation.databaseType) : undefined,
     databaseBuildEpoch: rawLocation.databaseBuildEpoch ? String(rawLocation.databaseBuildEpoch) : undefined,
-    resolvedAt: rawLocation.resolvedAt ? String(rawLocation.resolvedAt) : new Date().toISOString()
+    resolvedAt: rawLocation.resolvedAt ? String(rawLocation.resolvedAt) : new Date().toISOString(),
+    timeZone: rawLocation.timeZone ? String(rawLocation.timeZone) : undefined
   };
 
   if (!code || typeof code !== "string" || !/^\d{6}$/.test(code)) {
@@ -200,3 +201,4 @@ async function logVerificationEvent(serialId, result, ipHash, userAgent, request
     console.error("Failed to log verification event:", err);
   }
 }
+
