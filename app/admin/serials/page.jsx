@@ -14,6 +14,10 @@ export default function SerialsPage() {
   const [assignReference, setAssignReference] = useState("");
   const [assignLoading, setAssignLoading] = useState(false);
   
+  // Selection
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+  
   // Single generate
   const [singleGenerating, setSingleGenerating] = useState(false);
   const [lastGenerated, setLastGenerated] = useState(null);
@@ -35,6 +39,7 @@ export default function SerialsPage() {
       const json = await res.json();
       if (json.data) {
         setSerials(json.data);
+        setSelectedIds([]); // reset selection when fetching
       }
     } catch (e) {
       console.error(e);
@@ -146,6 +151,44 @@ export default function SerialsPage() {
     setAssignLoading(false);
   };
 
+  const handleToggleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(serials.map(s => s._id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleToggleRow = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected serial(s)?`)) return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/admin/serials", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds })
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchSerials();
+      } else {
+        alert(json.error || "Failed to delete");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error deleting serials");
+    }
+    setDeleting(false);
+  };
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-900">Serial Numbers</h1>
@@ -171,6 +214,18 @@ export default function SerialsPage() {
       <div className="mt-8">
         {activeTab === "all" && (
           <div>
+            {selectedIds.length > 0 && (
+              <div className="mb-4 flex items-center justify-between bg-red-50 p-4 rounded-md border border-red-200">
+                <span className="text-sm text-red-800 font-medium">{selectedIds.length} selected</span>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={deleting}
+                  className="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 disabled:opacity-50"
+                >
+                  {deleting ? "Deleting..." : "Delete Selected"}
+                </button>
+              </div>
+            )}
             {loading ? (
               <p>Loading...</p>
             ) : (
@@ -178,6 +233,14 @@ export default function SerialsPage() {
                 <table className="min-w-full divide-y divide-gray-300">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th scope="col" className="relative px-7 sm:w-12 sm:px-6">
+                        <input
+                          type="checkbox"
+                          className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                          checked={serials.length > 0 && selectedIds.length === serials.length}
+                          onChange={handleToggleSelectAll}
+                        />
+                      </th>
                       <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">Serial Code</th>
                       <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
                       <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Source</th>
@@ -190,7 +253,18 @@ export default function SerialsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 bg-white">
                     {serials.map((serial) => (
-                      <tr key={serial._id}>
+                      <tr key={serial._id} className={selectedIds.includes(serial._id) ? "bg-gray-50" : ""}>
+                        <td className="relative px-7 sm:w-12 sm:px-6">
+                          {selectedIds.includes(serial._id) && (
+                            <div className="absolute inset-y-0 left-0 w-0.5 bg-indigo-600" />
+                          )}
+                          <input
+                            type="checkbox"
+                            className="absolute left-4 top-1/2 -mt-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                            checked={selectedIds.includes(serial._id)}
+                            onChange={() => handleToggleRow(serial._id)}
+                          />
+                        </td>
                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 font-mono tracking-widest">
                           {serial.code}
                         </td>

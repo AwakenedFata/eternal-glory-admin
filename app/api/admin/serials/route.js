@@ -137,3 +137,34 @@ export async function POST(req) {
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
+
+export async function DELETE(req) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  await dbConnect();
+  
+  try {
+    const body = await req.json();
+    if (!body.ids || !Array.isArray(body.ids)) {
+      return NextResponse.json({ error: "Invalid payload, expected array of ids" }, { status: 400 });
+    }
+
+    if (body.ids.length === 0) {
+      return NextResponse.json({ success: true, deletedCount: 0 });
+    }
+
+    const result = await Serial.deleteMany({ _id: { $in: body.ids } });
+    
+    await AuditLog.create({
+      adminEmail: session.user.email,
+      action: "DELETE_SERIALS",
+      targetType: "SERIAL",
+      metadata: { deletedCount: result.deletedCount, requested: body.ids.length }
+    });
+
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
