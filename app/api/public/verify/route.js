@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import dbConnect from "@/lib/db/mongoose";
-import { Serial, VerificationEvent, Certificate } from "@/lib/db/models";
+import { Serial, VerificationEvent, Certificate, Nonce } from "@/lib/db/models";
 import { hashCode } from "@/lib/serial/service";
 import { processCertificateGeneration } from "@/lib/certificates/service";
 
@@ -56,15 +56,33 @@ export async function POST(req) {
 
   await dbConnect();
 
-  // Replay Protection using VerificationEvent as a nonce store
-  const existingEvent = await VerificationEvent.findOne({ requestId: nonce });
-  if (existingEvent) {
+  // Replay Protection using Strict Nonce Model
+  try {
+    await Nonce.create({ nonce });
+  } catch (err) {
     return NextResponse.json({ error: "Replay detected" }, { status: 403 });
   }
 
   const code = body.code;
   const claimToken = body.claimToken;
-  const location = body.verificationContext?.location;
+  
+  const rawLocation = body.verificationContext?.location;
+  if (!rawLocation || typeof rawLocation !== "object") {
+    return NextResponse.json({ error: "Invalid location schema" }, { status: 400 });
+  }
+  
+  const location = {
+    country: String(rawLocation.country || ""),
+    countryCode: rawLocation.countryCode ? String(rawLocation.countryCode) : undefined,
+    region: rawLocation.region ? String(rawLocation.region) : null,
+    regionCode: rawLocation.regionCode ? String(rawLocation.regionCode) : undefined,
+    displayName: String(rawLocation.displayName || "Unknown Location").substring(0, 100),
+    source: String(rawLocation.source || "UNKNOWN"),
+    status: String(rawLocation.status || "UNRESOLVED"),
+    databaseType: rawLocation.databaseType ? String(rawLocation.databaseType) : undefined,
+    databaseBuildEpoch: rawLocation.databaseBuildEpoch ? String(rawLocation.databaseBuildEpoch) : undefined,
+    resolvedAt: rawLocation.resolvedAt ? String(rawLocation.resolvedAt) : new Date().toISOString()
+  };
 
   if (!code || typeof code !== "string" || !/^\d{6}$/.test(code)) {
     return NextResponse.json({ error: "Invalid serial number format" }, { status: 400 });
@@ -176,7 +194,7 @@ async function logVerificationEvent(serialId, result, ipHash, userAgent, request
       result,
       ipHash,
       userAgent: userAgent.slice(0, 256),
-      requestId, // We store the nonce here to act as a replay constraint
+      requestId,
     });
   } catch (err) {
     console.error("Failed to log verification event:", err);
