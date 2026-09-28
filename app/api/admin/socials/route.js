@@ -75,7 +75,7 @@ export async function PUT(req) {
   if (body.sortOrder !== undefined) updateData.sortOrder = body.sortOrder;
   if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
-  const social = await SocialLink.findByIdAndUpdate(body.id, { $set: updateData }, { new: true });
+  const social = await SocialLink.findByIdAndUpdate(body.id, { $set: updateData }, { returnDocument: 'after' });
   if (!social) return NextResponse.json({ error: "Social link not found" }, { status: 404 });
 
   await AuditLog.create({

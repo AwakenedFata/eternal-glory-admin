@@ -67,7 +67,7 @@ export async function PUT(req) {
   if (body.sortOrder !== undefined) updateData.sortOrder = body.sortOrder;
   if (body.isActive !== undefined) updateData.isActive = body.isActive;
 
-  const store = await Store.findByIdAndUpdate(body.id, { $set: updateData }, { new: true });
+  const store = await Store.findByIdAndUpdate(body.id, { $set: updateData }, { returnDocument: 'after' });
   if (!store) return NextResponse.json({ error: "Store not found" }, { status: 404 });
 
   await AuditLog.create({

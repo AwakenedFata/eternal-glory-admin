@@ -16,7 +16,7 @@ export async function POST(req) {
   const serial = await Serial.findOneAndUpdate(
     { _id: body.id, status: { $ne: "VOID" } },
     { $set: { status: "VOID", voidedAt: new Date() } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!serial) return NextResponse.json({ error: "Serial not found or already voided" }, { status: 404 });

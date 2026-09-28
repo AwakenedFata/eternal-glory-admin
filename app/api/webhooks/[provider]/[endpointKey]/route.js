@@ -148,7 +148,7 @@ export async function POST(req, { params }) {
           nextRetryAt: new Date(), // Immediate process eligibility
         },
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (queuedEvent) {

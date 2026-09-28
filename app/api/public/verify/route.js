@@ -107,7 +107,7 @@ export async function POST(req) {
   const updated = await Serial.findOneAndUpdate(
     { _id: serial._id, status: { $in: ["AVAILABLE", "ASSIGNED", "ALLOCATED"] } },
     { $set: { status: "VERIFIED", verifiedAt: new Date() } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!updated) {

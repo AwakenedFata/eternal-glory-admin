@@ -23,7 +23,7 @@ export async function POST(req, { params }) {
         },
         $inc: { manualRetryCount: 1 }
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!event) {
