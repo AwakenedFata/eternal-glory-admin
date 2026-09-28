@@ -3,76 +3,97 @@ import crypto from "crypto";
 import dbConnect from "@/lib/db/mongoose";
 import { Serial, VerificationEvent, Certificate } from "@/lib/db/models";
 import { hashCode } from "@/lib/serial/service";
-import { hashIP, checkRateLimit, checkInvalidThrottle, recordInvalidAttempt } from "@/lib/security/rate-limit";
 import { processCertificateGeneration } from "@/lib/certificates/service";
-import { geolocateIP } from "@/lib/geolocation/service";
-import { getClientIp } from "@/lib/geolocation/get-client-ip";
 
 export async function POST(req) {
-  const ip = getClientIp(req);
-  const ipHash = hashIP(ip);
+  // 1. Authenticate Internal Request (HMAC-SHA256)
+  const secret = process.env.INTERNAL_SERVICE_SECRET;
+  if (!secret) {
+    console.error("INTERNAL_SERVICE_SECRET is missing");
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+
+  const timestamp = req.headers.get("X-Internal-Timestamp");
+  const nonce = req.headers.get("X-Internal-Nonce");
+  const signature = req.headers.get("X-Internal-Signature");
   const userAgent = req.headers.get("user-agent") || "";
-  const requestId = crypto.randomUUID();
-  const location = await geolocateIP(ip);
 
-  // Rate limit check
-  const rateCheck = await checkRateLimit(ipHash);
-  if (!rateCheck.allowed) {
-    await logVerificationEvent(null, "RATE_LIMITED", ipHash, userAgent, requestId);
-    return NextResponse.json(
-      { result: "RATE_LIMITED", message: "Too many requests. Please try again later." },
-      { status: 429 }
-    );
+  if (!timestamp || !nonce || !signature) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Invalid attempt throttle check
-  const throttleCheck = await checkInvalidThrottle(ipHash);
-  if (throttleCheck.blocked) {
-    await logVerificationEvent(null, "RATE_LIMITED", ipHash, userAgent, requestId);
-    return NextResponse.json(
-      { result: "RATE_LIMITED", message: "Too many invalid attempts. Please try again later." },
-      { status: 429 }
-    );
+  // Check timestamp freshness (± 60 seconds)
+  const now = Date.now();
+  const reqTime = parseInt(timestamp, 10);
+  if (isNaN(reqTime) || Math.abs(now - reqTime) > 60000) {
+    return NextResponse.json({ error: "Request expired" }, { status: 401 });
   }
 
+  let bodyString;
   let body;
   try {
-    body = await req.json();
+    bodyString = await req.text();
+    body = JSON.parse(bodyString);
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  // Verify HMAC Signature
+  const method = "POST";
+  const path = "/api/public/verify";
+  const bodyHash = crypto.createHash('sha256').update(bodyString).digest('hex');
+  const canonicalString = `${method}\n${path}\n${timestamp}\n${nonce}\n${bodyHash}`;
+  const expectedSignature = crypto.createHmac('sha256', secret).update(canonicalString).digest('hex');
+
+  // Constant-time comparison
+  try {
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) {
+      return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
+    }
+  } catch (e) {
+    return NextResponse.json({ error: "Invalid signature format" }, { status: 403 });
+  }
+
+  await dbConnect();
+
+  // Replay Protection using VerificationEvent as a nonce store
+  const existingEvent = await VerificationEvent.findOne({ requestId: nonce });
+  if (existingEvent) {
+    return NextResponse.json({ error: "Replay detected" }, { status: 403 });
+  }
+
   const code = body.code;
   const claimToken = body.claimToken;
+  const location = body.verificationContext?.location;
 
   if (!code || typeof code !== "string" || !/^\d{6}$/.test(code)) {
     return NextResponse.json({ error: "Invalid serial number format" }, { status: 400 });
   }
 
-  await dbConnect();
-
   const codeHashValue = hashCode(code);
   const serial = await Serial.findOne({ codeHash: codeHashValue });
 
+  // Use a constant ipHash for the internal authenticated path to skip rate limits 
+  // since the Public App already handles rate limiting against the real browser IP.
+  const ipHash = "internal-authenticated";
+
   if (!serial) {
-    await recordInvalidAttempt(ipHash);
-    await logVerificationEvent(null, "INVALID", ipHash, userAgent, requestId);
+    await logVerificationEvent(null, "INVALID", ipHash, userAgent, nonce);
     return NextResponse.json({ result: "INVALID", message: "Serial number not found." });
   }
 
   if (serial.status === "VOID") {
-    await recordInvalidAttempt(ipHash);
-    await logVerificationEvent(serial._id, "INVALID", ipHash, userAgent, requestId);
+    await logVerificationEvent(serial._id, "INVALID", ipHash, userAgent, nonce);
     return NextResponse.json({ result: "INVALID", message: "Serial number not found." });
   }
 
   // ALREADY VERIFIED FLOW
   if (serial.status === "VERIFIED") {
-    await logVerificationEvent(serial._id, "ALREADY_VERIFIED", ipHash, userAgent, requestId);
+    await logVerificationEvent(serial._id, "ALREADY_VERIFIED", ipHash, userAgent, nonce);
 
     let certificate = await Certificate.findOne({ serialId: serial._id });
     if (!certificate || certificate.status === "FAILED") {
-      // Recovery path if certificate failed or didn't generate during initial verification
+      // Recovery path
       try {
         const result = await processCertificateGeneration(serial._id, code, location);
         certificate = result.certificate;
@@ -98,7 +119,7 @@ export async function POST(req) {
       certificate: (isAuthorized && certificate) ? {
         publicId: certificate.publicId,
         status: certificate.status,
-        claimToken // Send back the raw token they just sent us to re-save if needed
+        claimToken
       } : null
     });
   }
@@ -111,8 +132,7 @@ export async function POST(req) {
   );
 
   if (!updated) {
-    // Concurrent verification
-    await logVerificationEvent(serial._id, "ALREADY_VERIFIED", ipHash, userAgent, requestId);
+    await logVerificationEvent(serial._id, "ALREADY_VERIFIED", ipHash, userAgent, nonce);
     const existingCert = await Certificate.findOne({ serialId: serial._id });
     return NextResponse.json({
       result: "ALREADY_VERIFIED",
@@ -121,9 +141,9 @@ export async function POST(req) {
     });
   }
 
-  await logVerificationEvent(serial._id, "VERIFIED", ipHash, userAgent, requestId);
+  await logVerificationEvent(serial._id, "VERIFIED", ipHash, userAgent, nonce);
 
-  // Generate certificate
+  // Generate certificate using the trusted location snapshot
   let certificate;
   let newClaimToken = null;
   try {
@@ -132,8 +152,6 @@ export async function POST(req) {
     newClaimToken = result.rawClaimToken;
   } catch (err) {
     console.error("Initial certificate generation failed:", err);
-    // Continue despite error, the user shouldn't be blocked from knowing their serial is valid
-    // The certificate status will be FAILED and can be retried
     certificate = await Certificate.findOne({ serialId: serial._id });
   }
 
@@ -146,7 +164,7 @@ export async function POST(req) {
     certificate: certificate ? {
       publicId: certificate.publicId,
       status: certificate.status,
-      claimToken: newClaimToken // Return the newly generated one
+      claimToken: newClaimToken
     } : null
   });
 }
@@ -158,7 +176,7 @@ async function logVerificationEvent(serialId, result, ipHash, userAgent, request
       result,
       ipHash,
       userAgent: userAgent.slice(0, 256),
-      requestId,
+      requestId, // We store the nonce here to act as a replay constraint
     });
   } catch (err) {
     console.error("Failed to log verification event:", err);
