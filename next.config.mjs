@@ -1,5 +1,6 @@
-/** @type {import('next').NextConfig} */
+﻿/** @type {import('next').NextConfig} */
 const nextConfig = {
+  serverExternalPackages: ['puppeteer-core', '@sparticuz/chromium'],
   async headers() {
     return [
       {

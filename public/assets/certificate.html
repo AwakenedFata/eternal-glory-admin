@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Certificate of Authenticity - ETERNAL GLORY</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: light;
+    --ink:#1a1a1a;
+    --green:#2e9e4f;
+  }
+  *{box-sizing:border-box;}
+  .zone p{ margin:0; }
+  html,body{
+    margin:0;
+    padding:0;
+    background:#e9e9e9;
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  body{
+    min-height:100vh;
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding: 24px 12px;
+  }
+  .cert-wrap{
+    width:100%;
+    max-width:560px;
+    container-type: inline-size;
+  }
+  .cert{
+    position:relative;
+    width:100%;
+    aspect-ratio: 2382 / 3368;
+    background-image:url('certificate-w-o-text.png');
+    background-size:100% 100%;
+    background-repeat:no-repeat;
+    box-shadow:0 4px 24px rgba(0,0,0,0.12);
+  }
+  .zone{
+    position:absolute;
+    left:8%;
+    width:84%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+    color:var(--ink);
+  }
+  /* Zone 0: header block (heading + 2 paragraphs) above first line */
+  .zone-0{
+    top:15.6%;
+    height:15.6%;
+    justify-content:space-between;
+    padding: 0 2%;
+  }
+  .heading{
+    font-weight:800;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    font-size:2.35cqw;
+    margin:0;
+    white-space:nowrap;
+  }
+  .p{
+    font-weight:400;
+    font-size:1.95cqw;
+    line-height:1.42;
+    margin:0;
+  }
+  .p b{ font-weight:700; }
+
+  /* Zone 1: Serial number, between line1 and line2 */
+  .zone-1{
+    top:31.65%;
+    height:8.14%;
+    justify-content:center;
+  }
+  .serial{
+    font-weight:700;
+    font-size:2.2cqw;
+    letter-spacing:0.01em;
+    white-space:nowrap;
+  }
+  .serial .num{ color:var(--green); }
+
+  /* Zone 2: Issued by / on / location, between line2 and line3 */
+  .zone-2{
+    top:39.79%;
+    height:11.04%;
+    justify-content:center;
+    gap: 1.1cqw;
+  }
+  .meta-line{
+    font-weight:400;
+    font-size:2.0cqw;
+    line-height:1.3;
+    white-space:nowrap;
+  }
+  .meta-line b{ font-weight:700; }
+
+  /* Zone 3: confirmation paragraphs, between line3 and line4 */
+  .zone-3{
+    top:50.83%;
+    height:16.6%;
+    justify-content:space-around;
+    padding: 0 2%;
+  }
+
+  /* Zone 4: Authorized Signature heading, sits above the baked-in signature/seal */
+  .zone-4{
+    top:68.1%;
+    height:6%;
+    justify-content:flex-start;
+  }
+  .sig-heading{
+    font-weight:700;
+    font-size:2.05cqw;
+    margin:0;
+    white-space:nowrap;
+  }
+
+  /* Zone 5: footer, between line5 and line6 */
+  .zone-5{
+    top:82.13%;
+    height:11.04%;
+    justify-content:center;
+    gap: 0.9cqw;
+  }
+  .footer-line{
+    font-size:1.85cqw;
+    line-height:1.3;
+    white-space:nowrap;
+  }
+  .footer-line.copy{ font-weight:700; }
+
+  @media (max-width:420px){
+    .cert-wrap{ max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cert-wrap">
+  <div class="cert">
+
+    <!-- Zone 0: Heading + intro paragraphs -->
+    <div class="zone zone-0">
+      <p class="heading">Certificate of Authenticity</p>
+      <p class="p">This document verifies that the item associated with the serial number below<br>is an <b>authentic and original product</b> of <b>ETERNAL GLORY</b>.</p>
+      <p class="p">Each certified piece represents the brand&rsquo;s dedication to craftsmanship,<br>detail, and originality &mdash; no reproductions, no replicas, no compromises.</p>
+    </div>
+
+    <!-- Zone 1: Serial number -->
+    <div class="zone zone-1">
+      <p class="serial">SERIAL NUMBER: <span class="num">dynamic</span></p>
+    </div>
+
+    <!-- Zone 2: Issued by / on / location -->
+    <div class="zone zone-2">
+      <p class="meta-line"><b>Issued by:</b> ETERNAL GLORY</p>
+      <p class="meta-line"><b>Issued on:</b> dynamic</p>
+      <p class="meta-line"><b>Location:</b> dynamic</p>
+    </div>
+
+    <!-- Zone 3: Confirmation paragraphs -->
+    <div class="zone zone-3">
+      <p class="p">This certificate confirms that the product listed under the serial number above<br>has been reviewed, approved, and released under the supervision of<br><b>ETERNAL GLORY&rsquo;s Authenticity &amp; Quality Control Division.</b></p>
+      <p class="p">Any duplication, modification, or reproduction of this certificate<br>is strictly prohibited and will void its authenticity status.</p>
+    </div>
+
+    <!-- Zone 4: Authorized Signature heading (seal/signature already baked into background) -->
+    <div class="zone zone-4">
+      <p class="sig-heading">Authorized Signature &amp; Official Seal</p>
+    </div>
+
+    <!-- Zone 5: Footer -->
+    <div class="zone zone-5">
+      <p class="footer-line copy">&copy; 2025 ETERNAL GLORY</p>
+      <p class="footer-line">All Rights Reserved Worldwide</p>
+      <p class="footer-line">www.eternalglory.my.id</p>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
