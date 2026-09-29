@@ -104,27 +104,27 @@ export async function POST(req) {
 
   const workerId = uuidv4();
   try {
-      const result = await processBatch(workerId);
-      return NextResponse.json({ success: true, ...result });
+    const result = await processBatch(workerId);
+    return NextResponse.json({ success: true, ...result });
   } catch (err) {
-      return NextResponse.json({ error: "Worker encountered an error", details: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Worker encountered an error", details: err.message }, { status: 500 });
   }
 }
 
 // Used by Vercel Cron
 export async function GET(req) {
   const authHeader = req.headers.get("authorization");
-  if (!authHeader || authHeader !== `Bearer ${process.env.VERCEL_CRON_SECRET}`) {
+  if (!authHeader || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const workerId = "CRON-" + uuidv4();
   console.log(`[${new Date().toISOString()}] Vercel Cron Invoked Worker: ${workerId}`);
-  
+
   try {
-      const result = await processBatch(workerId);
-      return NextResponse.json({ success: true, ...result });
+    const result = await processBatch(workerId);
+    return NextResponse.json({ success: true, ...result });
   } catch (err) {
-      return NextResponse.json({ error: "Worker encountered an error", details: err.message }, { status: 500 });
+    return NextResponse.json({ error: "Worker encountered an error", details: err.message }, { status: 500 });
   }
 }
