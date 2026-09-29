@@ -3,6 +3,10 @@
     {
       "path": "/api/admin/webhooks/worker",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/worker/certificates",
+      "schedule": "* * * * *"
     }
   ]
 }

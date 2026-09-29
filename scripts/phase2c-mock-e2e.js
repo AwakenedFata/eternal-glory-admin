@@ -40,7 +40,7 @@ async function runE2E() {
   const crypto = require('crypto');
 
   // Setup Test Integration
-  const testStore = await Store.findOneAndUpdate({ name: "E2E Test Store" }, { name: "E2E Test Store", storeUrl: "https://test.com" }, { upsert: true, new: true });
+  const testStore = await Store.findOneAndUpdate({ name: "E2E Test Store" }, { name: "E2E Test Store", storeUrl: "https://test.com" }, { upsert: true, returnDocument: 'after' });
   
   const endpointKey = "e2e-mock-key-" + Date.now();
   const integration = await StoreWebhookIntegration.create({

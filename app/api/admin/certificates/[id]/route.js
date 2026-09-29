@@ -6,6 +6,14 @@ import { Certificate, Serial, AuditLog, VerificationEvent } from "@/lib/db/model
 import { processCertificateGeneration } from "@/lib/certificates/service";
 import { getCertificateSignedUrl } from "@/lib/certificates/storage";
 
+async function logAudit(action, userId, targetType, targetId, metadata = {}) {
+  try {
+    await AuditLog.create({ action, adminId: userId, targetType, targetId, metadata });
+  } catch (err) {
+    console.error("Audit log failed:", err);
+  }
+}
+
 export async function GET(req, { params }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -73,9 +81,14 @@ export async function POST(req, { params }) {
         return NextResponse.json({ error: "Serial data not available for regeneration." }, { status: 400 });
       }
 
-      const { decryptSerial } = await import("@/lib/serial/service");
-      const plaintextSerial = decryptSerial(certificate.serialId.encryptedCode);
+      // If a worker is currently processing this certificate, we must
+      // invalidate it by incrementing generationVersion. The running
+      // worker's fencing check will fail when it tries to finalize.
+      if (certificate.status === "PROCESSING" && certificate.workerId) {
+        console.warn(`[Regeneration] Certificate ${id} is currently being processed by worker ${certificate.workerId}. Invalidating via generationVersion bump.`);
+      }
 
+      // Archive the current generation metadata before overwriting
       if (certificate.pdfObjectKey) {
         certificate.generationHistory.push({
           templateVersion: certificate.templateVersion,
@@ -88,21 +101,46 @@ export async function POST(req, { params }) {
         });
       }
 
-      certificate.status = "PROCESSING";
-      await certificate.save();
+      // INCREMENT generationVersion -- this is the fencing token.
+      // Any running worker with the old version will be unable to finalize.
+      // Use atomic findOneAndUpdate with $inc to prevent generationVersion race conditions
+      const updatedCert = await Certificate.findOneAndUpdate(
+        { _id: certificate._id },
+        {
+          $inc: { generationVersion: 1 },
+          $set: {
+            status: "PROCESSING",
+            workerId: null,
+            attemptCount: 0,
+            nextRetryAt: new Date(), // Immediately eligible
+            lastError: null
+          }
+        },
+        { returnDocument: 'after' } // Return the updated document
+      );
+      
+      // Update our local reference to reflect the atomic changes
+      Object.assign(certificate, updatedCert);
 
-      // Trigger background regeneration
-      const { processCertificateGeneration } = await import("@/lib/certificates/service");
-      processCertificateGeneration(certificate.serialId._id, plaintextSerial).catch(err => {
-        console.error("Background regeneration failed:", err);
-      });
+      // Trigger background worker acceleration (fire and forget)
+      // Use the request's own origin to construct the worker URL,
+      // so this works in both dev (localhost:3001) and production.
+      try {
+        const workerUrl = new URL("/api/worker/certificates", req.url).toString();
+        fetch(workerUrl, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` }
+        }).catch(err => console.error("Worker trigger failed:", err));
+      } catch (urlErr) {
+        console.error("Failed to construct worker URL:", urlErr);
+      }
 
       await logAudit(
         "CERTIFICATE_REGENERATE",
         session.user.id,
         "Certificate",
         certificate._id,
-        { publicId: certificate.publicId, previousSha256: certificate.pdfSha256 }
+        { publicId: certificate.publicId, previousSha256: certificate.pdfSha256, newGenerationVersion: certificate.generationVersion }
       );
 
       return NextResponse.json({ success: true, certificate });

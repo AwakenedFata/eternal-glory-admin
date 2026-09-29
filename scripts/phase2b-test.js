@@ -23,7 +23,7 @@ async function runTests() {
   const testStore = await Store.findOneAndUpdate(
     { name: "Test Store" },
     { name: "Test Store", storeUrl: "https://test.com", mark: "TS" },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   
   let integration = await StoreWebhookIntegration.findOneAndUpdate(
@@ -34,7 +34,7 @@ async function runTests() {
       endpointKey: "test-endpoint-key-123", 
       status: "ACTIVE" 
     },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
 
   console.log("\n==================================================");
@@ -89,7 +89,7 @@ async function runTests() {
       promises.push(ProductRule.findOneAndUpdate(
         { integrationId: integration._id, providerProductId: "RACE-001" },
         { $set: { sku: "RACE-001-SKU", isEligible: true, serialsPerUnit: 1 } },
-        { new: true, upsert: true }
+        { returnDocument: 'after', upsert: true }
       ));
     }
     
