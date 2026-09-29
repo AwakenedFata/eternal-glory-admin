@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/worker/certificates",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
