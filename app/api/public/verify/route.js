@@ -92,7 +92,7 @@ export async function POST(req) {
     }
 
     let isAuthorized = false;
-    if (certificate && certificate.claimTokenHash && claimToken) {
+    if (certificate && certificate.claimTokenHash && typeof claimToken === 'string') {
       if (crypto.createHash("sha256").update(claimToken).digest("hex") === certificate.claimTokenHash) isAuthorized = true;
     }
     return NextResponse.json({
