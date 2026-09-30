@@ -39,7 +39,7 @@ export async function POST(req) {
     }
   } catch (e) { return NextResponse.json({ error: "Invalid signature format" }, { status: 403 }); }
 
-  await dbConnect();
+  try { await dbConnect(); } catch (err) { console.error("DB connection failed:", err); return NextResponse.json({ error: "Database connection failed" }, { status: 500 }); }
 
   try {
     await Nonce.create({ nonce });
