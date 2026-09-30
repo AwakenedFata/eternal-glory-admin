@@ -148,14 +148,6 @@ export async function POST(req) {
   });
 }
 
-` }
-    }).catch(err => console.error("Immediate worker trigger failed:", err));
-  } catch (err) {
-    // Ignore URL parsing errors
-  }
-}
-
 async function logVerificationEvent(serialId, result, ipHash, userAgent, requestId) {
   try { await VerificationEvent.create({ serialId: serialId || undefined, result, ipHash, userAgent: userAgent.slice(0, 256), requestId }); } catch (err) {}
 }
-
