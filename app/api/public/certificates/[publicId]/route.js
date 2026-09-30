@@ -30,9 +30,16 @@ export async function GET(req, { params }) {
   const userAgent = req.headers.get("user-agent") || "unknown";
   const requestId = crypto.randomUUID();
 
-  // Validate Token
+  // Validate Token: accept INTERNAL_SERVICE_SECRET or user claim token
   let isAuthorized = false;
-  if (certificate.claimTokenHash && incomingToken) {
+  
+  // Server-to-server auth
+  if (incomingToken && incomingToken === process.env.INTERNAL_SERVICE_SECRET) {
+    isAuthorized = true;
+  }
+  
+  // User claim token auth
+  if (!isAuthorized && certificate.claimTokenHash && incomingToken) {
     const incomingHash = crypto.createHash("sha256").update(incomingToken).digest("hex");
     if (incomingHash === certificate.claimTokenHash) {
       isAuthorized = true;
@@ -69,7 +76,7 @@ export async function GET(req, { params }) {
       issuedAt: certificate.issuedAt,
       templateVersion: certificate.templateVersion,
       previewUrl,
-      downloadUrl, // Can be used for download href
+      downloadUrl,
     }
   });
 }

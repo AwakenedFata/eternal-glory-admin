@@ -25,8 +25,16 @@ export async function GET(req, { params }) {
     return NextResponse.json({ error: "Certificate not found" }, { status: 404 });
   }
 
+  // Auth: accept INTERNAL_SERVICE_SECRET (server-to-server) OR user claim token
   let isAuthorized = false;
-  if (certificate.claimTokenHash && incomingToken) {
+  
+  // Server-to-server auth via INTERNAL_SERVICE_SECRET
+  if (incomingToken && incomingToken === process.env.INTERNAL_SERVICE_SECRET) {
+    isAuthorized = true;
+  }
+  
+  // User claim token auth
+  if (!isAuthorized && certificate.claimTokenHash && incomingToken) {
     const incomingHash = crypto.createHash("sha256").update(incomingToken).digest("hex");
     if (incomingHash === certificate.claimTokenHash) {
       isAuthorized = true;
