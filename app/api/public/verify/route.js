@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { after } from "next/server";
 import crypto from "crypto";
 import dbConnect from "@/lib/db/mongoose";
@@ -80,6 +80,19 @@ export async function POST(req) {
     return NextResponse.json({ result: "INVALID", message: "Serial number not found." });
   }
 
+  function getWorkerUrl(req) {
+    try {
+      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+      const proto = req.headers.get("x-forwarded-proto") || "https";
+      if (host) {
+        return `${proto}://${host}/api/worker/certificates`;
+      }
+      return new URL("/api/worker/certificates", req.url).toString();
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ALREADY VERIFIED FLOW
   if (serial.status === "VERIFIED") {
     await logVerificationEvent(serial._id, "ALREADY_VERIFIED", ipHash, userAgent, nonce);
@@ -88,10 +101,17 @@ export async function POST(req) {
       try {
         const result = await processCertificateGeneration(serial._id, code, location);
         certificate = result.certificate;
-        const workerUrl = new URL("/api/worker/certificates", req.url).toString();
-        after(() => {
-          fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } }).catch(() => {});
-        });
+        
+        const workerUrl = getWorkerUrl(req);
+        if (workerUrl) {
+          console.log(`[VERIFY] scheduling immediate worker: ${workerUrl}`);
+          after(() => {
+            console.log(`[VERIFY] after callback started for ALREADY_VERIFIED`);
+            fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } })
+              .then(r => console.log(`[VERIFY] worker response: ${r.status}`))
+              .catch(err => console.error(`[VERIFY] worker trigger failed:`, err));
+          });
+        }
       } catch (err) {}
     }
 
@@ -130,12 +150,19 @@ export async function POST(req) {
     const result = await processCertificateGeneration(serial._id, code, location);
     certificate = result.certificate;
     newClaimToken = result.rawClaimToken;
+    console.log(`[VERIFY] certificate created: ${certificate.publicId}`);
     
-    // Immediate acceleration trigger (fire and forget)
-    const workerUrl = new URL("/api/worker/certificates", req.url).toString();
-    after(() => {
-      fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } }).catch(() => {});
-    });
+    // Immediate acceleration trigger
+    const workerUrl = getWorkerUrl(req);
+    if (workerUrl) {
+      console.log(`[VERIFY] scheduling immediate worker: ${workerUrl}`);
+      after(() => {
+        console.log(`[VERIFY] after callback started for VERIFIED`);
+        fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } })
+          .then(r => console.log(`[VERIFY] worker response: ${r.status}`))
+          .catch(err => console.error(`[VERIFY] worker trigger failed:`, err));
+      });
+    }
   } catch (err) {
     console.error("Initial certificate generation failed:", err);
     certificate = await Certificate.findOne({ serialId: serial._id });
