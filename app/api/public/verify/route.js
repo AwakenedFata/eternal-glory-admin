@@ -3,8 +3,9 @@ import { after } from "next/server";
 import crypto from "crypto";
 import dbConnect from "@/lib/db/mongoose";
 import { Serial, VerificationEvent, Certificate, Nonce } from "@/lib/db/models";
-import { hashCode } from "@/lib/serial/service";
-import { processCertificateGeneration } from "@/lib/certificates/service";
+import { hashCode, decryptCode } from "@/lib/serial/service";
+import { processCertificateGeneration, executeCertificateGenerationJob } from "@/lib/certificates/service";
+import { v4 as uuidv4 } from "uuid";
 
 export async function POST(req) {
   const secret = process.env.INTERNAL_SERVICE_SECRET;
@@ -80,17 +81,64 @@ export async function POST(req) {
     return NextResponse.json({ result: "INVALID", message: "Serial number not found." });
   }
 
-  function getWorkerUrl(req) {
-    try {
-      const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-      const proto = req.headers.get("x-forwarded-proto") || "https";
-      if (host) {
-        return `${proto}://${host}/api/worker/certificates`;
+  /**
+   * INLINE WORKER: Run certificate generation directly inside after() callback.
+   * 
+   * Why not HTTP fetch to /api/worker/certificates?
+   * - Vercel Hobby plan cron only runs once/day (fallback is useless)
+   * - after() + fetch() to self is fragile (URL construction, auth, cold starts)
+   * - Inline execution in after() is guaranteed by Vercel to complete
+   * 
+   * after() runs AFTER the response is sent to the client, so the user
+   * gets an immediate response while PDF generation happens in background.
+   */
+  function scheduleInlineWorker(certificateId, serialCode, generationVersion) {
+    const workerId = "INLINE-" + uuidv4();
+    console.log(`[VERIFY] Scheduling inline worker ${workerId} for cert ${certificateId}`);
+    
+    after(async () => {
+      try {
+        console.log(`[VERIFY] Inline worker ${workerId} starting generation`);
+        
+        // Claim the job first (same as worker route does)
+        await dbConnect();
+        const job = await Certificate.findOneAndUpdate(
+          {
+            _id: certificateId,
+            status: "PROCESSING",
+            $or: [
+              { workerId: null },
+              { workerId: { $exists: false } }
+            ]
+          },
+          {
+            $set: {
+              processingStartedAt: new Date(),
+              workerId: workerId,
+              lastAttemptAt: new Date()
+            },
+            $inc: { attemptCount: 1 }
+          },
+          { returnDocument: 'after' }
+        );
+        
+        if (!job) {
+          console.log(`[VERIFY] Inline worker: job already claimed or not found`);
+          return;
+        }
+        
+        const result = await executeCertificateGenerationJob(
+          certificateId,
+          serialCode,
+          workerId,
+          generationVersion
+        );
+        
+        console.log(`[VERIFY] Inline worker result: ${JSON.stringify(result)}`);
+      } catch (err) {
+        console.error(`[VERIFY] Inline worker failed:`, err);
       }
-      return new URL("/api/worker/certificates", req.url).toString();
-    } catch (e) {
-      return null;
-    }
+    });
   }
 
   // ALREADY VERIFIED FLOW
@@ -101,18 +149,10 @@ export async function POST(req) {
       try {
         const result = await processCertificateGeneration(serial._id, code, location);
         certificate = result.certificate;
-        
-        const workerUrl = getWorkerUrl(req);
-        if (workerUrl) {
-          console.log(`[VERIFY] scheduling immediate worker: ${workerUrl}`);
-          after(() => {
-            console.log(`[VERIFY] after callback started for ALREADY_VERIFIED`);
-            fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } })
-              .then(r => console.log(`[VERIFY] worker response: ${r.status}`))
-              .catch(err => console.error(`[VERIFY] worker trigger failed:`, err));
-          });
-        }
-      } catch (err) {}
+        scheduleInlineWorker(certificate._id, code, certificate.generationVersion || 1);
+      } catch (err) {
+        console.error("Certificate generation setup failed:", err);
+      }
     }
 
     let isAuthorized = false;
@@ -152,17 +192,8 @@ export async function POST(req) {
     newClaimToken = result.rawClaimToken;
     console.log(`[VERIFY] certificate created: ${certificate.publicId}`);
     
-    // Immediate acceleration trigger
-    const workerUrl = getWorkerUrl(req);
-    if (workerUrl) {
-      console.log(`[VERIFY] scheduling immediate worker: ${workerUrl}`);
-      after(() => {
-        console.log(`[VERIFY] after callback started for VERIFIED`);
-        fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } })
-          .then(r => console.log(`[VERIFY] worker response: ${r.status}`))
-          .catch(err => console.error(`[VERIFY] worker trigger failed:`, err));
-      });
-    }
+    // Schedule inline worker to generate PDF in background
+    scheduleInlineWorker(certificate._id, code, certificate.generationVersion || 1);
   } catch (err) {
     console.error("Initial certificate generation failed:", err);
     certificate = await Certificate.findOne({ serialId: serial._id });
