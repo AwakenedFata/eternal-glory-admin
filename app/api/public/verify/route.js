@@ -1,4 +1,5 @@
 ﻿import { NextResponse } from "next/server";
+import { after } from "next/server";
 import crypto from "crypto";
 import dbConnect from "@/lib/db/mongoose";
 import { Serial, VerificationEvent, Certificate, Nonce } from "@/lib/db/models";
@@ -87,7 +88,10 @@ export async function POST(req) {
       try {
         const result = await processCertificateGeneration(serial._id, code, location);
         certificate = result.certificate;
-        triggerWorker(req); // Trigger asynchronously
+        const workerUrl = new URL("/api/worker/certificates", req.url).toString();
+        after(() => {
+          fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } }).catch(() => {});
+        });
       } catch (err) {}
     }
 
@@ -128,7 +132,10 @@ export async function POST(req) {
     newClaimToken = result.rawClaimToken;
     
     // Immediate acceleration trigger (fire and forget)
-    triggerWorker(req);
+    const workerUrl = new URL("/api/worker/certificates", req.url).toString();
+    after(() => {
+      fetch(workerUrl, { method: "POST", headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` } }).catch(() => {});
+    });
   } catch (err) {
     console.error("Initial certificate generation failed:", err);
     certificate = await Certificate.findOne({ serialId: serial._id });
@@ -141,12 +148,7 @@ export async function POST(req) {
   });
 }
 
-function triggerWorker(req) {
-  try {
-    const workerUrl = new URL("/api/worker/certificates", req.url).toString();
-    fetch(workerUrl, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${process.env.INTERNAL_SERVICE_SECRET}` }
+` }
     }).catch(err => console.error("Immediate worker trigger failed:", err));
   } catch (err) {
     // Ignore URL parsing errors
